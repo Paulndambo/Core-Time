@@ -3,7 +3,7 @@
  * Handles all HTTP requests to the backend API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://coretime-rkqxz.ondigitalocean.app/api';
 
 // Log API configuration for debugging (only in development)
 if (import.meta.env.DEV) {
