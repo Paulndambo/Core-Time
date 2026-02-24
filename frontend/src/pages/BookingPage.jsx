@@ -29,7 +29,7 @@ import {
     setMinutes,
     getDay
 } from 'date-fns';
-import { getEventTypeDetails, createEventBooking } from '../services/api';
+import { getEventTypeDetails, getAvailabilitySlotsForUser, createEventBooking } from '../services/api';
 
 const BookingPage = () => {
     const { username, eventId } = useParams();
@@ -53,20 +53,73 @@ const BookingPage = () => {
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Transform API event type to component format
+    // Transform API response (from /event-types/<id>/details) into component shape.
+    // Field mapping based on actual API response:
+    //   event_owner  → ownerName (set separately on state)
+    //   event_name   → name
+    //   buffer_time  → bufferTime
+    //   start_date   → startDate
+    //   end_date     → endDate
     const transformEventTypeFromAPI = (apiEvent) => {
         return {
-            id: apiEvent.id,
-            name: apiEvent.event_name,
-            duration: apiEvent.duration,
-            description: apiEvent.description || '',
-            color: 'blue',
-            active: true,
-            location: apiEvent.location || 'Google Meet',
-            bufferTime: apiEvent.buffer_time || 0,
-            startDate: apiEvent.start_date,
-            endDate: apiEvent.end_date
+            id:          apiEvent.id,
+            name:        apiEvent.event_name,
+            ownerName:   apiEvent.event_owner  || '',   // "Paul Ndambo"
+            duration:    apiEvent.duration,
+            description: apiEvent.description  || '',
+            location:    apiEvent.location     || 'Google Meet',
+            bufferTime:  apiEvent.buffer_time  || 0,
+            startDate:   apiEvent.start_date,
+            endDate:     apiEvent.end_date,
         };
+    };
+
+    // Fetch the event owner's availability slots from the API and populate state.
+    // Falls back to Mon–Fri 9–5 defaults if the request fails or returns nothing.
+    const fetchOwnerAvailability = async (ownerUserId) => {
+        const emptyWeek = {
+            monday: [], tuesday: [], wednesday: [],
+            thursday: [], friday: [], saturday: [], sunday: [],
+        };
+
+        try {
+            const response = await getAvailabilitySlotsForUser(ownerUserId);
+            const slotsList = response.results || response || [];
+
+            if (Array.isArray(slotsList) && slotsList.length > 0) {
+                const byDay = { ...emptyWeek };
+
+                const dayMap = {
+                    monday: 'monday', tuesday: 'tuesday', wednesday: 'wednesday',
+                    thursday: 'thursday', friday: 'friday', saturday: 'saturday', sunday: 'sunday',
+                };
+
+                slotsList.forEach((slot) => {
+                    const key = dayMap[(slot.day_of_week || '').toLowerCase()];
+                    if (!key) return;
+                    // API returns "HH:MM:SS" — slice to "HH:MM"
+                    const start = (slot.start_time || '').slice(0, 5);
+                    const end   = (slot.end_time   || '').slice(0, 5);
+                    byDay[key] = [...byDay[key], { start, end }];
+                });
+
+                setAvailability(byDay);
+                return;
+            }
+        } catch (err) {
+            console.warn('Could not fetch owner availability from API, using defaults:', err.message);
+        }
+
+        // Fallback: Mon–Fri 9 AM – 5 PM
+        setAvailability({
+            monday:    [{ start: '09:00', end: '17:00' }],
+            tuesday:   [{ start: '09:00', end: '17:00' }],
+            wednesday: [{ start: '09:00', end: '17:00' }],
+            thursday:  [{ start: '09:00', end: '17:00' }],
+            friday:    [{ start: '09:00', end: '17:00' }],
+            saturday:  [],
+            sunday:    [],
+        });
     };
 
     useEffect(() => {
@@ -76,64 +129,46 @@ const BookingPage = () => {
 
             try {
                 if (eventId) {
+                    // Always fetch directly from the API using the eventId from the URL.
+                    // This is a public endpoint — no auth token required.
                     const eventData = await getEventTypeDetails(eventId);
                     const transformed = transformEventTypeFromAPI(eventData);
                     setEventType(transformed);
-                    
-                    if (eventData.owner_name) {
-                        setOwnerName(eventData.owner_name);
-                    }
-                    
+
+                    // Set owner name from the correct API field: event_owner
+                    setOwnerName(eventData.event_owner || '');
+
+                    // Initialise the calendar to the first selectable date within the
+                    // event's booking window (start_date → end_date).
                     const today = new Date();
-                    const startDate = eventData.start_date ? parse(eventData.start_date, 'yyyy-MM-dd', new Date()) : today;
-                    const endDate = eventData.end_date ? parse(eventData.end_date, 'yyyy-MM-dd', new Date()) : addDays(today, 365);
-                    
+                    const startDate = eventData.start_date
+                        ? parse(eventData.start_date, 'yyyy-MM-dd', new Date())
+                        : today;
+                    const endDate = eventData.end_date
+                        ? parse(eventData.end_date, 'yyyy-MM-dd', new Date())
+                        : addDays(today, 365);
+
                     let initialDate = today;
                     if (isAfter(startDate, today)) {
+                        // Booking window starts in the future — jump straight to it
                         initialDate = startDate;
                     } else if (isBefore(today, endDate) || isSameDay(today, endDate)) {
                         initialDate = today;
                     } else {
                         initialDate = startDate;
                     }
-                    
+
                     setSelectedDate(initialDate);
                     setCurrentWeekStart(startOfWeek(initialDate, { weekStartsOn: 1 }));
-                } else {
-                    const savedEvents = localStorage.getItem('schedulingEvents');
-                    if (savedEvents) {
-                        const events = JSON.parse(savedEvents);
-                        setEventTypes(events.filter(e => e.active));
-                    }
-                }
 
-                const savedAvailability = localStorage.getItem('schedulingAvailability');
-                if (savedAvailability) {
-                    setAvailability(JSON.parse(savedAvailability));
-                } else {
-                    setAvailability({
-                        monday: [{ start: '09:00', end: '17:00' }],
-                        tuesday: [{ start: '09:00', end: '17:00' }],
-                        wednesday: [{ start: '09:00', end: '17:00' }],
-                        thursday: [{ start: '09:00', end: '17:00' }],
-                        friday: [{ start: '09:00', end: '17:00' }],
-                        saturday: [],
-                        sunday: []
-                    });
+                    // Fetch the event owner's availability slots using their user UUID
+                    // from the event details response. This is a public lookup so any
+                    // visitor (on any device/browser) always sees the real owner schedule.
+                    await fetchOwnerAvailability(eventData.user);
                 }
             } catch (err) {
                 console.error('Error fetching event details:', err);
                 setError(err.message || 'Failed to load event details. Please try again.');
-                const savedEvents = localStorage.getItem('schedulingEvents');
-                if (savedEvents) {
-                    const events = JSON.parse(savedEvents);
-                    const activeEvents = events.filter(e => e.active);
-                    setEventTypes(activeEvents);
-                    if (eventId) {
-                        const event = events.find(e => e.id === eventId);
-                        if (event && event.active) setEventType(event);
-                    }
-                }
             } finally {
                 setLoading(false);
             }
@@ -144,6 +179,11 @@ const BookingPage = () => {
 
     const getAvailableTimeSlots = (date) => {
         if (!eventType || !availability) return [];
+
+        // Never generate slots for dates outside the event's booking window.
+        // This is the single authoritative gate — it prevents out-of-range dates
+        // from showing as available even when the owner has general weekly availability.
+        if (!isDateInBookingRange(date)) return [];
 
         const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][getDay(date)];
         const dayAvailability = availability[dayName] || [];
@@ -533,10 +573,11 @@ const BookingPage = () => {
                         {/* Day Selection — 7 equal columns, compact on mobile */}
                         <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-6 sm:mb-8">
                             {weekDays.map((day, index) => {
-                                const isSelected       = selectedDate && isSameDay(day, selectedDate);
-                                const isPast           = isBefore(startOfDay(day), startOfDay(new Date()));
-                                const isInEventRange   = (() => {
-                                    // Strict event date-range check (ignores today/availability)
+                                const isSelected      = selectedDate && isSameDay(day, selectedDate);
+                                const isPast          = isBefore(startOfDay(day), startOfDay(new Date()));
+                                // isInEventRange: date is within start_date…end_date but may still be past.
+                                // Used only for styling; isEnabled uses isDateInBookingRange which covers both.
+                                const isInEventRange  = (() => {
                                     const d = startOfDay(day);
                                     if (eventType.startDate) {
                                         const sd = startOfDay(parse(eventType.startDate, 'yyyy-MM-dd', new Date()));
@@ -548,8 +589,11 @@ const BookingPage = () => {
                                     }
                                     return true;
                                 })();
-                                const hasAvailability  = getAvailableTimeSlots(day).length > 0;
-                                const isEnabled        = !isPast && isInEventRange && hasAvailability;
+                                // getAvailableTimeSlots already calls isDateInBookingRange internally,
+                                // so hasAvailability is only true when the date is within the event
+                                // window, not past, AND has real owner time slots.
+                                const hasAvailability = getAvailableTimeSlots(day).length > 0;
+                                const isEnabled       = hasAvailability;
 
                                 return (
                                     <button

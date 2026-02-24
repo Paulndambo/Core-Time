@@ -1398,15 +1398,42 @@ export const deleteEventType = async (eventTypeId) => {
 };
 
 /**
+ * Get availability slots for a specific user (public endpoint — used by the booking page).
+ * Passes the owner's user UUID as a query param so the guest visitor gets
+ * the right owner's slots without needing to be authenticated themselves.
+ */
+export const getAvailabilitySlotsForUser = async (userId) => {
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/scheduling/availability-slots/?user=${encodeURIComponent(userId)}`,
+            {
+                method: 'GET',
+                headers: { 'Accept': '*/*' },
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.message || 'Failed to fetch availability slots');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Get availability slots for user error:', error);
+        throw error;
+    }
+};
+
+/**
  * Get event type details (public endpoint, no authentication required)
  */
 export const getEventTypeDetails = async (eventTypeId) => {
     try {
+        // Public endpoint — no authentication required, no Content-Type on a GET
         const response = await fetch(`${API_BASE_URL}/scheduling/event-types/${eventTypeId}/details`, {
             method: 'GET',
             headers: {
                 'Accept': '*/*',
-                'Content-Type': 'application/json',
             },
         });
         
