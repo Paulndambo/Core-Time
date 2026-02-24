@@ -34,6 +34,7 @@ import BookDetails from './pages/BookDetails';
 import Labs from './pages/Labs';
 import ComingSoon from './pages/ComingSoon';
 import Scheduling from './pages/Scheduling';
+import EventTypeDetailsPage from './pages/EventTypeDetailsPage';
 import BookingPage from './pages/BookingPage';
 import Forms from './pages/Forms';
 import FormBuilder from './pages/FormBuilder';
@@ -130,6 +131,7 @@ function App() {
           <Route path="meet" element={<FeatureRoute feature="meet"><Meet /></FeatureRoute>} />
           <Route path="email" element={<FeatureRoute feature="email"><Email /></FeatureRoute>} />
           <Route path="scheduling" element={<FeatureRoute feature="scheduling"><Scheduling /></FeatureRoute>} />
+          <Route path="scheduling/event-types/:eventId" element={<FeatureRoute feature="scheduling"><EventTypeDetailsPage /></FeatureRoute>} />
           <Route path="forms" element={<FeatureRoute feature="forms"><Forms /></FeatureRoute>} />
           <Route path="forms/:formId/edit" element={<FeatureRoute feature="forms"><FormBuilder /></FeatureRoute>} />
           <Route path="forms/:formId/responses" element={<FeatureRoute feature="forms"><FormResponses /></FeatureRoute>} />

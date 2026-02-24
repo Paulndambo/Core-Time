@@ -25,11 +25,11 @@ import {
     isAfter,
     isBefore,
     startOfDay,
+    isValid,
     setHours,
-    setMinutes,
-    getDay
+    setMinutes
 } from 'date-fns';
-import { getEventTypeDetails, getAvailabilitySlotsForUser, createEventBooking } from '../services/api';
+import { getEventTypeDetails, createEventBooking } from '../services/api';
 
 const BookingPage = () => {
     const { username, eventId } = useParams();
@@ -38,7 +38,9 @@ const BookingPage = () => {
     const [eventTypes, setEventTypes] = useState([]);
     const [eventType, setEventType] = useState(null);
     const [ownerName, setOwnerName] = useState(null);
-    const [availability, setAvailability] = useState({});
+    const [ownerUserId, setOwnerUserId] = useState(null);
+    const [timeSlots, setTimeSlots] = useState([]);
+    const [timeSlotsLoading, setTimeSlotsLoading] = useState(false);
     const [selectedDate, setSelectedDate] = useState(null);
     const [selectedTime, setSelectedTime] = useState(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -53,73 +55,58 @@ const BookingPage = () => {
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Transform API response (from /event-types/<id>/details) into component shape.
-    // Field mapping based on actual API response:
-    //   event_owner  → ownerName (set separately on state)
-    //   event_name   → name
-    //   buffer_time  → bufferTime
-    //   start_date   → startDate
-    //   end_date     → endDate
-    const transformEventTypeFromAPI = (apiEvent) => {
-        return {
-            id:          apiEvent.id,
-            name:        apiEvent.event_name,
-            ownerName:   apiEvent.event_owner  || '',   // "Paul Ndambo"
-            duration:    apiEvent.duration,
-            description: apiEvent.description  || '',
-            location:    apiEvent.location     || 'Google Meet',
-            bufferTime:  apiEvent.buffer_time  || 0,
-            startDate:   apiEvent.start_date,
-            endDate:     apiEvent.end_date,
-        };
+    const getDateOnlyPrefix = (value) => {
+        if (!value) return null;
+        if (value instanceof Date) return isValid(value) ? format(value, 'yyyy-MM-dd') : null;
+        if (typeof value !== 'string') return null;
+        const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : null;
     };
 
-    // Fetch the event owner's availability slots from the API and populate state.
-    // Falls back to Mon–Fri 9–5 defaults if the request fails or returns nothing.
-    const fetchOwnerAvailability = async (ownerUserId) => {
-        const emptyWeek = {
-            monday: [], tuesday: [], wednesday: [],
-            thursday: [], friday: [], saturday: [], sunday: [],
-        };
+    const parseApiDate = (value) => {
+        if (!value) return null;
 
-        try {
-            const response = await getAvailabilitySlotsForUser(ownerUserId);
-            const slotsList = response.results || response || [];
-
-            if (Array.isArray(slotsList) && slotsList.length > 0) {
-                const byDay = { ...emptyWeek };
-
-                const dayMap = {
-                    monday: 'monday', tuesday: 'tuesday', wednesday: 'wednesday',
-                    thursday: 'thursday', friday: 'friday', saturday: 'saturday', sunday: 'sunday',
-                };
-
-                slotsList.forEach((slot) => {
-                    const key = dayMap[(slot.day_of_week || '').toLowerCase()];
-                    if (!key) return;
-                    // API returns "HH:MM:SS" — slice to "HH:MM"
-                    const start = (slot.start_time || '').slice(0, 5);
-                    const end   = (slot.end_time   || '').slice(0, 5);
-                    byDay[key] = [...byDay[key], { start, end }];
-                });
-
-                setAvailability(byDay);
-                return;
-            }
-        } catch (err) {
-            console.warn('Could not fetch owner availability from API, using defaults:', err.message);
+        // Already a Date instance
+        if (value instanceof Date) {
+            return isValid(value) ? startOfDay(value) : null;
         }
 
-        // Fallback: Mon–Fri 9 AM – 5 PM
-        setAvailability({
-            monday:    [{ start: '09:00', end: '17:00' }],
-            tuesday:   [{ start: '09:00', end: '17:00' }],
-            wednesday: [{ start: '09:00', end: '17:00' }],
-            thursday:  [{ start: '09:00', end: '17:00' }],
-            friday:    [{ start: '09:00', end: '17:00' }],
-            saturday:  [],
-            sunday:    [],
-        });
+        if (typeof value !== 'string') return null;
+
+        // Treat anything that *starts* with YYYY-MM-DD as a date-only value (no timezone shifting),
+        // even if the backend sends a full ISO timestamp like "2026-02-24T00:00:00Z".
+        const datePrefixMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (datePrefixMatch) {
+            const d = parse(datePrefixMatch[1], 'yyyy-MM-dd', new Date());
+            return isValid(d) ? startOfDay(d) : null;
+        }
+
+        // Fallback: ISO timestamps etc.
+        const d = new Date(value);
+        return isValid(d) ? startOfDay(d) : null;
+    };
+
+    // Transform API response (from /event-types/<id>/details) into component shape.
+    // Field mapping based on actual API response:
+    //   event_owner      → ownerName (set separately on state)
+    //   event_name       → name
+    //   buffer_time      → bufferTime
+    //   start_date       → startDate
+    //   end_date         → endDate
+    //   available_slots  → availableSlots (array of { day_of_week, start_time, end_time })
+    const transformEventTypeFromAPI = (apiEvent) => {
+        return {
+            id:             apiEvent.id,
+            name:           apiEvent.event_name,
+            ownerName:      apiEvent.event_owner     || '',
+            duration:       apiEvent.duration,
+            description:    apiEvent.description     || '',
+            location:       apiEvent.location        || 'Google Meet',
+            bufferTime:     apiEvent.buffer_time     || 0,
+            startDate:      apiEvent.start_date,
+            endDate:        apiEvent.end_date,
+            availableSlots: apiEvent.available_slots || [],
+        };
     };
 
     useEffect(() => {
@@ -141,12 +128,12 @@ const BookingPage = () => {
                     // Initialise the calendar to the first selectable date within the
                     // event's booking window (start_date → end_date).
                     const today = new Date();
-                    const startDate = eventData.start_date
-                        ? parse(eventData.start_date, 'yyyy-MM-dd', new Date())
-                        : today;
-                    const endDate = eventData.end_date
-                        ? parse(eventData.end_date, 'yyyy-MM-dd', new Date())
-                        : addDays(today, 365);
+
+                    // For range math, prefer date-only parsing (YYYY-MM-DD) to avoid timezone edge cases.
+                    const startDateStr = getDateOnlyPrefix(eventData.start_date);
+                    const endDateStr = getDateOnlyPrefix(eventData.end_date);
+                    const startDate = startDateStr ? startOfDay(parse(startDateStr, 'yyyy-MM-dd', new Date())) : startOfDay(today);
+                    const endDate = endDateStr ? startOfDay(parse(endDateStr, 'yyyy-MM-dd', new Date())) : startOfDay(addDays(today, 365));
 
                     let initialDate = today;
                     if (isAfter(startDate, today)) {
@@ -161,10 +148,8 @@ const BookingPage = () => {
                     setSelectedDate(initialDate);
                     setCurrentWeekStart(startOfWeek(initialDate, { weekStartsOn: 1 }));
 
-                    // Fetch the event owner's availability slots using their user UUID
-                    // from the event details response. This is a public lookup so any
-                    // visitor (on any device/browser) always sees the real owner schedule.
-                    await fetchOwnerAvailability(eventData.user);
+                    // Store owner UUID — slots are fetched on demand when a date is selected.
+                    setOwnerUserId(eventData.user);
                 }
             } catch (err) {
                 console.error('Error fetching event details:', err);
@@ -177,48 +162,64 @@ const BookingPage = () => {
         fetchEventDetails();
     }, [eventId]);
 
-    const getAvailableTimeSlots = (date) => {
-        if (!eventType || !availability) return [];
-
-        // Never generate slots for dates outside the event's booking window.
-        // This is the single authoritative gate — it prevents out-of-range dates
-        // from showing as available even when the owner has general weekly availability.
-        if (!isDateInBookingRange(date)) return [];
-
-        const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][getDay(date)];
-        const dayAvailability = availability[dayName] || [];
-
-        if (dayAvailability.length === 0) return [];
-
-        const slots = [];
-        const now = new Date();
-        const isToday = isSameDay(date, now);
-
-        dayAvailability.forEach(slot => {
-            const [startHour, startMinute] = slot.start.split(':').map(Number);
-            const [endHour, endMinute] = slot.end.split(':').map(Number);
-
-            let currentTime = setMinutes(setHours(date, startHour), startMinute);
-            const endTime = setMinutes(setHours(date, endHour), endMinute);
-
-            while (isBefore(currentTime, endTime)) {
-                if (!isToday || isAfter(currentTime, now)) {
-                    const slotEnd = addMinutes(currentTime, eventType.duration);
-                    if (isBefore(slotEnd, endTime) || slotEnd.getTime() === endTime.getTime()) {
-                        slots.push(new Date(currentTime));
-                    }
-                }
-                currentTime = addMinutes(currentTime, 30);
-            }
-        });
-
-        return slots;
-    };
-
     const handleDateSelect = (date) => {
+        // Hard guard — never allow selecting a date outside the booking window,
+        // even if a disabled button's click event somehow fired (e.g. touch / keyboard).
+        if (!isDateInBookingRange(date)) return;
         setSelectedDate(date);
         setSelectedTime(null);
     };
+
+    // Generate bookable time slots from the already-fetched available_slots whenever
+    // the selected date or eventType changes.  No extra API call is needed — the
+    // available_slots array is embedded in the event-type details response.
+    useEffect(() => {
+        if (!selectedDate || !eventType) return;
+        if (!isDateInBookingRange(selectedDate)) {
+            setTimeSlots([]);
+            return;
+        }
+
+        const dayName = format(selectedDate, 'EEEE'); // "Monday", "Tuesday", …
+
+        // Filter the embedded slots to those matching the selected day of the week.
+        const slotsForDay = (eventType.availableSlots || []).filter(
+            (s) => s.day_of_week === dayName
+        );
+
+        if (slotsForDay.length === 0) {
+            setTimeSlots([]);
+            return;
+        }
+
+        setTimeSlotsLoading(true);
+        setTimeSlots([]);
+
+        const now = new Date();
+        const isToday = isSameDay(selectedDate, now);
+        const generated = [];
+
+        slotsForDay.forEach((slot) => {
+            const [sh, sm] = (slot.start_time || '').slice(0, 5).split(':').map(Number);
+            const [eh, em] = (slot.end_time   || '').slice(0, 5).split(':').map(Number);
+
+            let cur = setMinutes(setHours(selectedDate, sh), sm);
+            const end = setMinutes(setHours(selectedDate, eh), em);
+
+            while (isBefore(cur, end)) {
+                if (!isToday || isAfter(cur, now)) {
+                    const slotEnd = addMinutes(cur, eventType.duration);
+                    if (isBefore(slotEnd, end) || slotEnd.getTime() === end.getTime()) {
+                        generated.push(new Date(cur));
+                    }
+                }
+                cur = addMinutes(cur, eventType.duration);
+            }
+        });
+
+        setTimeSlots(generated);
+        setTimeSlotsLoading(false);
+    }, [selectedDate, eventType]);
 
     const handleTimeSelect = (time) => {
         setSelectedTime(time);
@@ -227,11 +228,16 @@ const BookingPage = () => {
     const handleNextWeek = () => {
         const nextWeekStart = addDays(currentWeekStart, 7);
         if (eventType && eventType.endDate) {
-            const endDate = startOfDay(parse(eventType.endDate, 'yyyy-MM-dd', new Date()));
+            const endDateStr = getDateOnlyPrefix(eventType.endDate);
+            if (!endDateStr) {
+                setCurrentWeekStart(nextWeekStart);
+                return;
+            }
             // Allow as long as the FIRST day of next week is still on/before endDate.
             // This ensures weeks that merely start before endDate are always reachable,
             // even when some days later in that week fall after endDate.
-            if (!isAfter(nextWeekStart, endDate)) {
+            const nextWeekKey = format(startOfDay(nextWeekStart), 'yyyy-MM-dd');
+            if (nextWeekKey <= endDateStr) {
                 setCurrentWeekStart(nextWeekStart);
             }
         } else {
@@ -251,8 +257,11 @@ const BookingPage = () => {
         // Using prevWeekEnd (not prevWeekStart) means weeks that merely begin before
         // startDate but still contain valid days remain reachable.
         if (eventType && eventType.startDate) {
-            const startDate = startOfDay(parse(eventType.startDate, 'yyyy-MM-dd', new Date()));
-            if (isBefore(prevWeekEnd, startDate)) return;
+            const startDateStr = getDateOnlyPrefix(eventType.startDate);
+            if (startDateStr) {
+                const prevWeekEndKey = format(startOfDay(prevWeekEnd), 'yyyy-MM-dd');
+                if (prevWeekEndKey < startDateStr) return;
+            }
         }
 
         setCurrentWeekStart(prevWeekStart);
@@ -262,19 +271,29 @@ const BookingPage = () => {
         if (!eventType) return false;
         
         const dateToCheck = startOfDay(date);
-        const today = startOfDay(new Date());
+        const dateKey = format(dateToCheck, 'yyyy-MM-dd');
+        const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
         
-        if (isBefore(dateToCheck, today)) return false;
+        // Must not be in the past.
+        if (dateKey < todayKey) return false;
         
+        // Must fall within the event's start_date → end_date window.
         if (eventType.startDate) {
-            const startDate = parse(eventType.startDate, 'yyyy-MM-dd', new Date());
-            if (isBefore(dateToCheck, startDate)) return false;
+            const startDateStr = getDateOnlyPrefix(eventType.startDate);
+            if (startDateStr && dateKey < startDateStr) return false;
         }
         
         if (eventType.endDate) {
-            const endDate = parse(eventType.endDate, 'yyyy-MM-dd', new Date());
-            if (isAfter(dateToCheck, endDate)) return false;
+            const endDateStr = getDateOnlyPrefix(eventType.endDate);
+            if (endDateStr && dateKey > endDateStr) return false;
         }
+
+        // Must have at least one available slot defined for this day of the week.
+        const dayName = format(date, 'EEEE'); // e.g. "Monday"
+        const hasSlot = (eventType.availableSlots || []).some(
+            (s) => s.day_of_week === dayName
+        );
+        if (!hasSlot) return false;
         
         return true;
     };
@@ -290,6 +309,12 @@ const BookingPage = () => {
     const handleConfirmBooking = async () => {
         if (!eventType || !selectedDate || !selectedTime) {
             setError('Please select a date and time');
+            return;
+        }
+
+        if (!isDateInBookingRange(selectedDate)) {
+            setError('Selected date is outside the allowed booking range for this event.');
+            setStep(1);
             return;
         }
 
@@ -453,7 +478,6 @@ const BookingPage = () => {
     }
 
     const weekDays = getWeekDays();
-    const availableSlots = selectedDate ? getAvailableTimeSlots(selectedDate) : [];
 
     const LocationIcon = eventType.location === 'Phone Call' ? Phone
         : eventType.location === 'In Person' ? MapPin
@@ -521,8 +545,14 @@ const BookingPage = () => {
                                 <CalendarIcon size={14} className="flex-shrink-0" />
                                 <span>
                                     Bookings accepted
-                                    {eventType.startDate && <> from <strong>{format(parse(eventType.startDate, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}</strong></>}
-                                    {eventType.endDate   && <> to <strong>{format(parse(eventType.endDate,   'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}</strong></>}
+                                    {eventType.startDate && (() => {
+                                        const d = parseApiDate(eventType.startDate);
+                                        return d ? <> from <strong>{format(d, 'MMM d, yyyy')}</strong></> : null;
+                                    })()}
+                                    {eventType.endDate && (() => {
+                                        const d = parseApiDate(eventType.endDate);
+                                        return d ? <> to <strong>{format(d, 'MMM d, yyyy')}</strong></> : null;
+                                    })()}
                                 </span>
                             </div>
                         )}
@@ -537,11 +567,12 @@ const BookingPage = () => {
                                     // Using the last day (not first) means partial weeks that still contain
                                     // valid days remain reachable.
                                     const prevWeekEnd = addDays(currentWeekStart, -1);
-                                    const today = startOfDay(new Date());
-                                    if (isBefore(prevWeekEnd, today)) return true;
+                                    const prevWeekEndKey = format(startOfDay(prevWeekEnd), 'yyyy-MM-dd');
+                                    const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
+                                    if (prevWeekEndKey < todayKey) return true;
                                     if (eventType && eventType.startDate) {
-                                        const startDate = startOfDay(parse(eventType.startDate, 'yyyy-MM-dd', new Date()));
-                                        if (isBefore(prevWeekEnd, startDate)) return true;
+                                        const startDateStr = getDateOnlyPrefix(eventType.startDate);
+                                        if (startDateStr && prevWeekEndKey < startDateStr) return true;
                                     }
                                     return false;
                                 })()}
@@ -560,8 +591,9 @@ const BookingPage = () => {
                                     // valid days remain reachable.
                                     if (eventType && eventType.endDate) {
                                         const nextWeekStart = addDays(currentWeekStart, 7);
-                                        const endDate = startOfDay(parse(eventType.endDate, 'yyyy-MM-dd', new Date()));
-                                        return isAfter(nextWeekStart, endDate);
+                                        const nextWeekKey = format(startOfDay(nextWeekStart), 'yyyy-MM-dd');
+                                        const endDateStr = getDateOnlyPrefix(eventType.endDate);
+                                        return endDateStr ? nextWeekKey > endDateStr : false;
                                     }
                                     return false;
                                 })()}
@@ -573,50 +605,21 @@ const BookingPage = () => {
                         {/* Day Selection — 7 equal columns, compact on mobile */}
                         <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-6 sm:mb-8">
                             {weekDays.map((day, index) => {
-                                const isSelected      = selectedDate && isSameDay(day, selectedDate);
-                                const isPast          = isBefore(startOfDay(day), startOfDay(new Date()));
-                                // isInEventRange: date is within start_date…end_date but may still be past.
-                                // Used only for styling; isEnabled uses isDateInBookingRange which covers both.
-                                const isInEventRange  = (() => {
-                                    const d = startOfDay(day);
-                                    if (eventType.startDate) {
-                                        const sd = startOfDay(parse(eventType.startDate, 'yyyy-MM-dd', new Date()));
-                                        if (isBefore(d, sd)) return false;
-                                    }
-                                    if (eventType.endDate) {
-                                        const ed = startOfDay(parse(eventType.endDate, 'yyyy-MM-dd', new Date()));
-                                        if (isAfter(d, ed)) return false;
-                                    }
-                                    return true;
-                                })();
-                                // getAvailableTimeSlots already calls isDateInBookingRange internally,
-                                // so hasAvailability is only true when the date is within the event
-                                // window, not past, AND has real owner time slots.
-                                const hasAvailability = getAvailableTimeSlots(day).length > 0;
-                                const isEnabled       = hasAvailability;
+                                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                                const isEnabled  = isDateInBookingRange(day);
 
                                 return (
                                     <button
                                         key={index}
                                         onClick={() => isEnabled ? handleDateSelect(day) : null}
                                         disabled={!isEnabled}
-                                        title={
-                                            !isInEventRange
-                                                ? 'Outside booking window'
-                                                : isPast
-                                                ? 'Date has passed'
-                                                : !hasAvailability
-                                                ? 'No availability'
-                                                : undefined
-                                        }
+                                        title={!isEnabled ? 'Outside booking window' : undefined}
                                         className={`py-2 px-0.5 sm:p-3 rounded-xl text-center transition-all relative ${
-                                            isSelected
-                                                ? 'bg-blue-600 text-white shadow-lg scale-105'
-                                                : isEnabled
-                                                ? 'bg-gray-50 hover:bg-blue-50 active:bg-blue-100 text-gray-900 border border-transparent hover:border-blue-200'
-                                                : !isInEventRange
+                                            !isEnabled
                                                 ? 'bg-gray-100 text-gray-300 cursor-not-allowed opacity-40'
-                                                : 'bg-gray-50 text-gray-300 cursor-not-allowed opacity-50'
+                                                : isSelected
+                                                ? 'bg-blue-600 text-white shadow-lg scale-105'
+                                                : 'bg-gray-50 hover:bg-blue-50 active:bg-blue-100 text-gray-900 border border-transparent hover:border-blue-200'
                                         }`}
                                     >
                                         <div className="text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1">
@@ -635,7 +638,6 @@ const BookingPage = () => {
                             {selectedDate ? (
                                 <>
                                     <h4 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">
-                                        {/* Full on tablet+, abbreviated on mobile */}
                                         <span className="hidden sm:inline">
                                             Available Times for {format(selectedDate, 'EEEE, MMMM d')}
                                         </span>
@@ -643,11 +645,16 @@ const BookingPage = () => {
                                             {format(selectedDate, 'EEE, MMM d')}
                                         </span>
                                     </h4>
-                                    {availableSlots.length > 0 ? (
+                                    {timeSlotsLoading ? (
+                                        <div className="flex items-center justify-center py-10 gap-3 text-gray-400">
+                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                            <span className="text-sm">Loading available times…</span>
+                                        </div>
+                                    ) : timeSlots.length > 0 ? (
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 max-h-72 sm:max-h-96 overflow-y-auto pr-1">
-                                            {availableSlots.map((slot, index) => {
-                                                const isSlotSelected = selectedTime && isSameDay(slot, selectedTime) && 
-                                                                 slot.getTime() === selectedTime.getTime();
+                                            {timeSlots.map((slot, index) => {
+                                                const isSlotSelected = selectedTime && isSameDay(slot, selectedTime) &&
+                                                    slot.getTime() === selectedTime.getTime();
                                                 return (
                                                     <button
                                                         key={index}

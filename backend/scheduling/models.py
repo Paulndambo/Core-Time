@@ -19,9 +19,10 @@ class BookingEventType(AbstractBaseModel):
 
 
 
+
 class EventBooking(AbstractBaseModel):
     user = models.ForeignKey("users.User", on_delete=models.CASCADE, null=True)
-    event = models.ForeignKey(BookingEventType, on_delete=models.CASCADE)
+    event = models.ForeignKey(BookingEventType, on_delete=models.CASCADE, related_name="bookings")
     name = models.CharField(max_length=255)
     email = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=255, null=True)
@@ -44,7 +45,8 @@ DAYS_OF_WEEK = [
 ]
 
 class AvailabilitySlot(AbstractBaseModel):
-    user = models.ForeignKey("users.User", on_delete=models.CASCADE, null=True)
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE, null=True, related_name="availability_slots")
+    event_type = models.ForeignKey(BookingEventType, on_delete=models.CASCADE, null=True, related_name="availability_slots")
     day_of_week = models.CharField(max_length=20, choices=DAYS_OF_WEEK, default="Monday")
     start_time = models.TimeField()
     end_time = models.TimeField()

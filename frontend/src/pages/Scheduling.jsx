@@ -18,15 +18,18 @@ import {
     ChevronRight,
     AlertCircle,
     Mail,
-    MessageSquare
+    MessageSquare,
+    Eye,
 } from 'lucide-react';
 import { format, addDays, startOfWeek, addMinutes, parse, setHours, setMinutes } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import { getEventTypes, createEventType, updateEventType, deleteEventType, getEventBookings, getAvailabilitySlots, createAvailabilitySlot } from '../services/api';
 
 const Scheduling = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('events'); // 'events' | 'availability' | 'settings'
     const [eventTypes, setEventTypes] = useState([]);
     const [availability, setAvailability] = useState({});
@@ -546,6 +549,14 @@ const Scheduling = () => {
 
                                         {/* Actions */}
                                         <div className="flex items-center gap-3 pt-4 border-t border-[var(--color-border)]">
+                                            <button
+                                                onClick={() => navigate(`/scheduling/event-types/${event.id}`)}
+                                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] font-semibold rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-all border border-[var(--color-border)] hover:border-blue-200"
+                                                title="View details"
+                                            >
+                                                <Eye size={16} />
+                                                Details
+                                            </button>
                                             <button
                                                 onClick={() => copyToClipboard(getBookingLink(event.id))}
                                                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"

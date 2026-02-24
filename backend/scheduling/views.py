@@ -7,7 +7,7 @@ from core.permissions import UserScopedQuerySetMixin
 
 
 from scheduling.models import EventBooking, BookingEventType, AvailabilitySlot
-from scheduling.serializers import BookingEventTypeSerializer, EventBookingSerializer, AvailabilitySlotSerializer
+from scheduling.serializers import BookingEventTypeSerializer, EventBookingSerializer, AvailabilitySlotSerializer, BookingEventTypeDetailSerializer
 # Create your views here.
 class AvailabilitySlotAPIView(UserScopedQuerySetMixin, generics.ListCreateAPIView):
     queryset = AvailabilitySlot.objects.all().order_by("-created_at")
@@ -20,10 +20,26 @@ class BookingEventTypeAPIView(UserScopedQuerySetMixin, generics.ListCreateAPIVie
     serializer_class = BookingEventTypeSerializer
     permission_classes = [IsAuthenticated]
 
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            event_type = serializer.save(user=request.user)
+            days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            for day in days:
+                AvailabilitySlot.objects.create(
+                    user=request.user,
+                    event_type=event_type,
+                    day_of_week=day,
+                    start_time="08:00",
+                    end_time="17:00"
+                )
+            return Response({"success": "Event Type Created successfully"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class BookingEventTypeDetailAPIView(generics.RetrieveAPIView):
     queryset = BookingEventType.objects.all().order_by("-created_at")
-    serializer_class = BookingEventTypeSerializer
+    serializer_class = BookingEventTypeDetailSerializer
     permission_classes = [AllowAny]
 
     lookup_field = "pk"

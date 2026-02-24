@@ -3,7 +3,7 @@
  * Handles all HTTP requests to the backend API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://coretime-rkqxz.ondigitalocean.app/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 // Log API configuration for debugging (only in development)
 if (import.meta.env.DEV) {
@@ -1402,10 +1402,13 @@ export const deleteEventType = async (eventTypeId) => {
  * Passes the owner's user UUID as a query param so the guest visitor gets
  * the right owner's slots without needing to be authenticated themselves.
  */
-export const getAvailabilitySlotsForUser = async (userId) => {
+export const getAvailabilitySlotsForUser = async (userId, params = {}) => {
     try {
+        const queryParams = new URLSearchParams({ user: userId });
+        if (params.day_of_week) queryParams.append('day_of_week', params.day_of_week);
+
         const response = await fetch(
-            `${API_BASE_URL}/scheduling/availability-slots/?user=${encodeURIComponent(userId)}`,
+            `${API_BASE_URL}/scheduling/availability-slots/?${queryParams.toString()}`,
             {
                 method: 'GET',
                 headers: { 'Accept': '*/*' },
