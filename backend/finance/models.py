@@ -8,6 +8,8 @@ class Transaction(AbstractBaseModel):
     category = models.CharField(max_length=255)
     transaction_type = models.CharField(max_length=255)
     transaction_date = models.DateField(null=True)
+    payment_method = models.CharField(max_length=255, default="Mpesa")
+    status = models.CharField(max_length=255, default="Pending")
 
     def __str__(self):
         return self.description
@@ -28,3 +30,14 @@ class Investment(AbstractBaseModel):
     @property
     def change(self):
         return ((self.current_value - self.initial_value) / (self.initial_value)) * 100
+    
+
+class MoneyRequest(AbstractBaseModel):
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE, related_name="money_requests")
+    from_whom = models.CharField(max_length=255, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=255, default="Pending")
+    direction = models.CharField(max_length=255, default="Outgoing")
+
+    def __str__(self):
+        return f"{self.user.username} - {self.amount}"

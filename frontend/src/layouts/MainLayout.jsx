@@ -34,7 +34,8 @@ import {
     CalendarClock,
     ClipboardList,
     Zap,
-    Users
+    Users,
+    HandCoins
 } from 'lucide-react';
 
 import CoretimeLogo from '../assets/CoretimeLogo';
@@ -81,6 +82,7 @@ const MainLayout = () => {
             '/transactions': 'Transactions',
             '/investments': 'Investments',
             '/loans': 'Loans',
+            '/money-requests': 'Money Requests',
             '/bills': 'Bills',
             '/invoices': 'Invoices',
             '/budgets': 'Budgets',
@@ -115,6 +117,7 @@ const MainLayout = () => {
                 { path: '/transactions', label: 'Transactions', icon: CreditCard },
                 { path: '/investments', label: 'Investments', icon: TrendingUp },
                 { path: '/loans', label: 'Loans', icon: CreditCard },
+                { path: '/money-requests', label: 'Money Requests', icon: HandCoins },
                 { path: '/bills', label: 'Bills', icon: Receipt },
                 { path: '/invoices', label: 'Invoices', icon: FileText },
                 { path: '/budgets', label: 'Budgets', icon: PieChart },
@@ -192,6 +195,7 @@ const MainLayout = () => {
                 { path: '/transactions', label: 'Transactions', icon: CreditCard },
                 { path: '/investments', label: 'Investments', icon: TrendingUp },
                 { path: '/loans', label: 'Loans', icon: CreditCard },
+                { path: '/money-requests', label: 'Money Requests', icon: HandCoins },
             ]
         },
         {
@@ -228,7 +232,7 @@ const MainLayout = () => {
     const navSections = LAUNCH_MODE === 'full' ? fullNavSections : mvpNavSections;
 
     const NavItem = ({ item, isNested = false }) => {
-        const isActive = location.pathname === item.path;
+        const isActive = (location.pathname + location.search) === item.path || location.pathname === item.path;
         const Icon = item.icon;
         return (
             <NavLink

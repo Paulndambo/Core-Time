@@ -411,7 +411,7 @@ export const createBook = async (bookData) => {
  */
 export const updateBook = async (bookId, bookData) => {
     try {
-        const response = await apiRequest(`/library/books/${bookId}/`, {
+        const response = await apiRequest(`/library/books/${bookId}/details/`, {
             method: 'PUT',
             body: JSON.stringify(bookData),
         });
@@ -438,7 +438,7 @@ export const updateBook = async (bookId, bookData) => {
  */
 export const patchBook = async (bookId, bookData) => {
     try {
-        const response = await apiRequest(`/library/books/${bookId}/`, {
+        const response = await apiRequest(`/library/books/${bookId}/details/`, {
             method: 'PATCH',
             body: JSON.stringify(bookData),
         });
@@ -465,7 +465,7 @@ export const patchBook = async (bookId, bookData) => {
  */
 export const deleteBook = async (bookId) => {
     try {
-        const response = await apiRequest(`/library/books/${bookId}/`, {
+        const response = await apiRequest(`/library/books/${bookId}/details/`, {
             method: 'DELETE',
         });
         
@@ -634,6 +634,119 @@ export const getTransactions = async (params = {}) => {
         return await response.json();
     } catch (error) {
         console.error('Get transactions error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Update transaction status (e.g., confirm a pending transaction)
+ */
+export const updateTransactionStatus = async (transactionId, status) => {
+    try {
+        const response = await apiRequest(`/finance/transactions/${transactionId}/update/`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail ||
+                               errorData.message ||
+                               errorData.error ||
+                               Object.values(errorData).flat().join(', ') ||
+                               'Failed to update transaction status';
+            throw new Error(errorMessage);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Update transaction status error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Money Requests API functions
+ */
+
+/**
+ * Get all money requests
+ */
+export const getMoneyRequests = async (params = {}) => {
+    try {
+        // Build query string from params
+        const queryParams = new URLSearchParams();
+        if (params.direction) queryParams.append('direction', params.direction);
+        if (params.status) queryParams.append('status', params.status);
+        if (params.page) queryParams.append('page', params.page);
+        
+        const queryString = queryParams.toString();
+        const url = `/finance/money-requests/${queryString ? `?${queryString}` : ''}`;
+        
+        const response = await apiRequest(url, { method: 'GET' });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.message || 'Failed to fetch money requests');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Get money requests error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Create a new money request
+ */
+export const createMoneyRequest = async (moneyRequestData) => {
+    try {
+        const response = await apiRequest('/finance/money-requests/', {
+            method: 'POST',
+            body: JSON.stringify(moneyRequestData),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || 
+                               errorData.message || 
+                               errorData.error ||
+                               Object.values(errorData).flat().join(', ') ||
+                               'Failed to create money request';
+            throw new Error(errorMessage);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Create money request error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Update a money request
+ */
+export const updateMoneyRequest = async (moneyRequestId, moneyRequestData) => {
+    try {
+        const response = await apiRequest(`/finance/money-requests/${moneyRequestId}/details/`, {
+            method: 'PUT',
+            body: JSON.stringify(moneyRequestData),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || 
+                               errorData.message || 
+                               errorData.error ||
+                               Object.values(errorData).flat().join(', ') ||
+                               'Failed to update money request';
+            throw new Error(errorMessage);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Update money request error:', error);
         throw error;
     }
 };

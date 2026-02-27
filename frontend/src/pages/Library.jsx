@@ -8,11 +8,11 @@ import {
     CheckCircle,
     Clock,
     Book,
-    BarChart3,
     Star,
     AlertCircle,
     DollarSign,
-    Eye
+    Eye,
+    Edit
 } from 'lucide-react';
 import { getBooks, createBook, patchBook, deleteBook as deleteBookAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,6 +44,7 @@ const Library = () => {
         cost: '',
         status: 'Want to Read' 
     });
+    const [editingBook, setEditingBook] = useState(null);
 
     // Fetch books on component mount
     useEffect(() => {
@@ -84,11 +85,34 @@ const Library = () => {
     const stats = {
         total: books.length,
         reading: books.filter(b => b.status === 'Reading').length,
-        completed: books.filter(b => b.status === 'Completed').length,
-        pagesRead: books.filter(b => b.status === 'Completed').reduce((acc, curr) => acc + (parseInt(curr.pages) || 0), 0)
+        completed: books.filter(b => b.status === 'Completed').length
     };
 
-    const handleAddBook = async (e) => {
+    const openAddBookModal = () => {
+        setEditingBook(null);
+        setNewBook({
+            title: '',
+            author: '',
+            pages: '',
+            cost: '',
+            status: 'Want to Read'
+        });
+        setIsModalOpen(true);
+    };
+
+    const openEditBookModal = (book) => {
+        setEditingBook(book);
+        setNewBook({
+            title: book.title || '',
+            author: book.author || '',
+            pages: book.pages ? String(book.pages) : '',
+            cost: book.cost ? String(book.cost) : '',
+            status: book.status || 'Want to Read'
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleSaveBook = async (e) => {
         e.preventDefault();
         if (!newBook.title || !newBook.author) return;
 
@@ -112,41 +136,39 @@ const Library = () => {
                 user: String(userId) // Ensure user ID is a string
             };
 
-            console.log('Creating book with data:', bookData); // Debug log
+            if (editingBook) {
+                const updatedBook = await patchBook(editingBook.id, bookData);
 
-            const createdBook = await createBook(bookData);
-            
-            // Add the new book to the list with UI formatting
-            const newBookWithColor = {
-                ...createdBook,
-                coverColor: getBookColor(createdBook.id),
-                rating: 0
-            };
-            
-            setBooks([...books, newBookWithColor]);
+                const updatedBookWithColor = {
+                    ...updatedBook,
+                    coverColor: getBookColor(updatedBook.id),
+                    rating: editingBook.rating ?? 0
+                };
+
+                setBooks(books.map(b => b.id === editingBook.id ? updatedBookWithColor : b));
+            } else {
+                console.log('Creating book with data:', bookData); // Debug log
+
+                const createdBook = await createBook(bookData);
+                
+                // Add the new book to the list with UI formatting
+                const newBookWithColor = {
+                    ...createdBook,
+                    coverColor: getBookColor(createdBook.id),
+                    rating: 0
+                };
+                
+                setBooks([...books, newBookWithColor]);
+            }
+
             setNewBook({ title: '', author: '', pages: '', cost: '', status: 'Want to Read' });
+            setEditingBook(null);
             setIsModalOpen(false);
         } catch (error) {
-            console.error('Error creating book:', error);
-            setError(error.message || 'Failed to add book. Please try again.');
+            console.error('Error saving book:', error);
+            setError(error.message || 'Failed to save book. Please try again.');
         } finally {
             setIsSaving(false);
-        }
-    };
-
-    const updateStatus = async (id, newStatus) => {
-        try {
-            const updatedBook = await patchBook(id, {
-                status: newStatus
-            });
-
-            // Update local state
-            setBooks(books.map(b => b.id === id ? { ...updatedBook, coverColor: getBookColor(updatedBook.id) } : b));
-        } catch (error) {
-            console.error('Error updating book status:', error);
-            setError(error.message || 'Failed to update book status. Please try again.');
-            // Revert on error
-            fetchBooks();
         }
     };
 
@@ -191,7 +213,7 @@ const Library = () => {
                             className="pl-9 pr-4 py-2 bg-[var(--color-bg-tertiary)] rounded-lg text-sm outline-none focus:ring-2 focus:ring-[var(--color-accent)] w-full md:w-64"
                         />
                     </div>
-                    <button onClick={() => setIsModalOpen(true)} className="btn btn-primary gap-2">
+                    <button onClick={openAddBookModal} className="btn btn-primary gap-2">
                         <Plus size={18} />
                         <span className="hidden sm:inline">Add Book</span>
                     </button>
@@ -215,34 +237,27 @@ const Library = () => {
             )}
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="card p-4 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2">
-                        <Book size={20} />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="card p-5 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-3">
+                        <Book size={24} />
                     </div>
-                    <span className="text-2xl font-bold text-[var(--color-text-primary)]">{stats.total}</span>
-                    <span className="text-xs text-[var(--color-text-muted)]">Total Books</span>
+                    <span className="text-3xl font-bold text-[var(--color-text-primary)] mb-1">{stats.total}</span>
+                    <span className="text-sm text-[var(--color-text-muted)] font-medium">Total Books</span>
                 </div>
-                <div className="card p-4 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center mb-2">
-                        <Clock size={20} />
+                <div className="card p-5 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center mb-3">
+                        <Clock size={24} />
                     </div>
-                    <span className="text-2xl font-bold text-[var(--color-text-primary)]">{stats.reading}</span>
-                    <span className="text-xs text-[var(--color-text-muted)]">Reading Now</span>
+                    <span className="text-3xl font-bold text-[var(--color-text-primary)] mb-1">{stats.reading}</span>
+                    <span className="text-sm text-[var(--color-text-muted)] font-medium">Reading Now</span>
                 </div>
-                <div className="card p-4 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-2">
-                        <CheckCircle size={20} />
+                <div className="card p-5 flex flex-col items-center justify-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-3">
+                        <CheckCircle size={24} />
                     </div>
-                    <span className="text-2xl font-bold text-[var(--color-text-primary)]">{stats.completed}</span>
-                    <span className="text-xs text-[var(--color-text-muted)]">Books Read</span>
-                </div>
-                <div className="card p-4 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-2">
-                        <BarChart3 size={20} />
-                    </div>
-                    <span className="text-2xl font-bold text-[var(--color-text-primary)]">{stats.pagesRead}</span>
-                    <span className="text-xs text-[var(--color-text-muted)]">Pages Read</span>
+                    <span className="text-3xl font-bold text-[var(--color-text-primary)] mb-1">{stats.completed}</span>
+                    <span className="text-sm text-[var(--color-text-muted)] font-medium">Books Read</span>
                 </div>
             </div>
 
@@ -263,83 +278,91 @@ const Library = () => {
             </div>
 
             {/* Books Table */}
-            <div className="card">
-                <div className="p-6 border-b border-[var(--color-border)]">
+            <div className="card overflow-hidden">
+                <div className="px-6 py-5 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
                     <h2 className="text-xl font-bold text-[var(--color-text-primary)]">All Books</h2>
+                    <p className="text-sm text-[var(--color-text-muted)] mt-1">{filteredBooks.length} {filteredBooks.length === 1 ? 'book' : 'books'}</p>
                 </div>
                 <div className="overflow-x-auto">
                     {filteredBooks.length === 0 ? (
-                        <div className="text-center py-12 text-[var(--color-text-muted)]">
-                            <BookOpen className="mx-auto mb-4 text-[var(--color-text-muted)]" size={48} />
-                            <p className="text-lg font-medium">No books found</p>
-                            <p className="text-sm mt-2">Add your first book to get started!</p>
+                        <div className="text-center py-16 text-[var(--color-text-muted)]">
+                            <BookOpen className="mx-auto mb-4 text-[var(--color-text-muted)] opacity-50" size={56} />
+                            <p className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">No books found</p>
+                            <p className="text-sm">Add your first book to get started!</p>
                         </div>
                     ) : (
                         <table className="w-full">
-                            <thead className="text-left text-sm text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
+                            <thead className="bg-[var(--color-bg-secondary)]">
                                 <tr>
-                                    <th className="pb-3 pl-6 font-medium">Title</th>
-                                    <th className="pb-3 font-medium">Author</th>
-                                    <th className="pb-3 font-medium">Pages</th>
-                                    <th className="pb-3 font-medium">Cost</th>
-                                    <th className="pb-3 font-medium">Status</th>
-                                    <th className="pb-3 pr-6 text-right font-medium">Actions</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Title</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Author</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Pages</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Cost</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-4 text-right text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="text-sm">
+                            <tbody className="divide-y divide-[var(--color-border)]">
                                 {filteredBooks.map((book) => (
-                                    <tr key={book.id} className="group border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg-tertiary)] transition-colors">
-                                        <td className="py-4 pl-6">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded ${book.coverColor} flex items-center justify-center flex-shrink-0`}>
-                                                    <BookOpen className="text-white" size={20} />
+                                    <tr key={book.id} className="group hover:bg-[var(--color-bg-tertiary)] transition-colors duration-150">
+                                        <td className="px-6 py-5">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-12 h-12 rounded-lg ${book.coverColor} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                                                    <BookOpen className="text-white" size={22} />
                                                 </div>
                                                 <div>
-                                                    <div className="font-medium text-[var(--color-text-primary)]">{book.title}</div>
+                                                    <div className="font-semibold text-[var(--color-text-primary)] text-base mb-0.5">{book.title}</div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-4 text-[var(--color-text-secondary)]">{book.author}</td>
-                                        <td className="py-4 text-[var(--color-text-secondary)]">{book.pages || 0} pages</td>
-                                        <td className="py-4">
+                                        <td className="px-6 py-5">
+                                            <span className="text-[var(--color-text-secondary)] font-medium">{book.author}</span>
+                                        </td>
+                                        <td className="px-6 py-5">
+                                            <span className="text-[var(--color-text-secondary)]">{book.pages || 0} <span className="text-[var(--color-text-muted)]">pages</span></span>
+                                        </td>
+                                        <td className="px-6 py-5">
                                             {book.cost ? (
-                                                <div className="flex items-center gap-1 text-[var(--color-text-primary)] font-medium">
-                                                    <DollarSign size={14} />
-                                                    {parseFloat(book.cost).toLocaleString()}
+                                                <div className="flex items-center gap-1.5 text-[var(--color-text-primary)] font-semibold">
+                                                    <DollarSign size={16} className="text-[var(--color-text-muted)]" />
+                                                    <span>{parseFloat(book.cost).toLocaleString()}</span>
                                                 </div>
                                             ) : (
                                                 <span className="text-[var(--color-text-muted)]">-</span>
                                             )}
                                         </td>
-                                        <td className="py-4">
-                                            <select
-                                                value={book.status}
-                                                onChange={(e) => updateStatus(book.id, e.target.value)}
-                                                className={`text-xs border rounded-lg px-3 py-1.5 font-medium outline-none cursor-pointer transition-colors ${
-                                                    book.status === 'Reading' 
-                                                        ? 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200' 
-                                                        : book.status === 'Completed' 
-                                                        ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
-                                                        : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                                        <td className="px-6 py-5">
+                                            <span
+                                                className={`inline-flex items-center text-xs font-semibold border rounded-full px-3.5 py-1.5 ${
+                                                    book.status === 'Reading'
+                                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                                        : book.status === 'Completed'
+                                                        ? 'bg-green-50 text-green-700 border-green-200'
+                                                        : 'bg-gray-50 text-gray-700 border-gray-200'
                                                 }`}
                                             >
-                                                <option value="Want to Read">Want to Read</option>
-                                                <option value="Reading">Reading</option>
-                                                <option value="Completed">Completed</option>
-                                            </select>
+                                                {book.status}
+                                            </span>
                                         </td>
-                                        <td className="py-4 pr-6">
-                                            <div className="flex items-center justify-end gap-2">
+                                        <td className="px-6 py-5">
+                                            <div className="flex items-center justify-end gap-1.5">
                                                 <button
                                                     onClick={() => navigate(`/library/books/${book.id}`)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-150 hover:scale-105"
                                                     title="View details"
                                                 >
                                                     <Eye size={18} />
                                                 </button>
                                                 <button
+                                                    onClick={() => openEditBookModal(book)}
+                                                    className="p-2.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all duration-150 hover:scale-105"
+                                                    title="Edit book"
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button
                                                     onClick={() => handleDeleteBook(book.id)}
-                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-150 hover:scale-105"
                                                     title="Delete book"
                                                 >
                                                     <Trash2 size={18} />
@@ -354,14 +377,18 @@ const Library = () => {
                 </div>
             </div>
 
-            {/* Add Book Modal */}
+            {/* Add/Edit Book Modal */}
             <Modal
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Add New Book"
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setEditingBook(null);
+                    setNewBook({ title: '', author: '', pages: '', cost: '', status: 'Want to Read' });
+                }}
+                title={editingBook ? "Edit Book" : "Add New Book"}
                 size="xl"
             >
-                <form onSubmit={handleAddBook} className="p-6 space-y-6">
+                <form onSubmit={handleSaveBook} className="p-6 space-y-6">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
                                 <input
@@ -423,12 +450,12 @@ const Library = () => {
                                 className="w-full btn btn-primary mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isSaving ? (
-                                    <span className="flex items-center justify-center gap-2">
+                                <span className="flex items-center justify-center gap-2">
                                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                        Adding...
+                                        {editingBook ? 'Saving changes...' : 'Adding...'}
                                     </span>
                                 ) : (
-                                    'Add to Library'
+                                    editingBook ? 'Save Changes' : 'Add to Library'
                                 )}
                             </button>
                         </form>

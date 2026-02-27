@@ -10,9 +10,8 @@ import {
     DollarSign
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { getTransactions } from '../services/api';
+import { getTransactions, createTransaction, updateTransactionStatus } from '../services/api';
 import Modal from '../components/Modal';
-import { createTransaction } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, formatCurrencyWithSign } from '../constants/currency';
 
@@ -23,6 +22,9 @@ const Transactions = () => {
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [transactionToConfirm, setTransactionToConfirm] = useState(null);
+    const [isConfirming, setIsConfirming] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [newTransaction, setNewTransaction] = useState({
@@ -30,7 +32,8 @@ const Transactions = () => {
         amount: '',
         type: 'expense',
         category: 'Food',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        payment_method: 'Mpesa'
     });
 
     // Fetch transactions on component mount
@@ -78,7 +81,8 @@ const Transactions = () => {
                 category: newTransaction.category,
                 transaction_type: newTransaction.type === 'income' ? 'Income' : 'Expense',
                 amount: parseFloat(newTransaction.amount),
-                transaction_date: newTransaction.date
+                transaction_date: newTransaction.date,
+                payment_method: newTransaction.payment_method
             };
 
             await createTransaction(transactionData);
@@ -92,7 +96,8 @@ const Transactions = () => {
                 amount: '', 
                 type: 'expense', 
                 category: 'Food', 
-                date: new Date().toISOString().split('T')[0] 
+                date: new Date().toISOString().split('T')[0],
+                payment_method: 'Mpesa'
             });
         } catch (err) {
             console.error('Error creating transaction:', err);
@@ -121,6 +126,30 @@ const Transactions = () => {
         return type === 'Income' 
             ? 'text-emerald-600 bg-emerald-50' 
             : 'text-red-600 bg-red-50';
+    };
+
+    const handleConfirmClick = (transaction) => {
+        setTransactionToConfirm(transaction);
+        setIsConfirmModalOpen(true);
+    };
+
+    const handleConfirmTransaction = async () => {
+        if (!transactionToConfirm) return;
+        
+        setError(null);
+        setIsConfirming(true);
+        
+        try {
+            await updateTransactionStatus(transactionToConfirm.id, 'Confirmed');
+            await fetchTransactions();
+            setIsConfirmModalOpen(false);
+            setTransactionToConfirm(null);
+        } catch (err) {
+            console.error('Error confirming transaction:', err);
+            setError(err.message || 'Failed to confirm transaction. Please try again.');
+        } finally {
+            setIsConfirming(false);
+        }
     };
 
     return (
@@ -272,7 +301,9 @@ const Transactions = () => {
                                     <th className="pb-3 font-semibold">Category</th>
                                     <th className="pb-3 font-semibold">Type</th>
                                     <th className="pb-3 font-semibold">Date</th>
+                                    <th className="pb-3 font-semibold">Payment Method</th>
                                     <th className="pb-3 pr-6 text-right font-semibold">Amount</th>
+                                    <th className="pb-3 pr-6 font-semibold">Confirmation</th>
                                 </tr>
                             </thead>
                             <tbody className="text-sm divide-y divide-slate-50">
@@ -301,12 +332,36 @@ const Transactions = () => {
                                                 ? format(new Date(transaction.created_at), 'MMM dd, yyyy')
                                                 : 'N/A'}
                                         </td>
+                                        <td className="py-4">
+                                            <span className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                                                {transaction.payment_method || 'N/A'}
+                                            </span>
+                                        </td>
                                         <td className={`py-4 pr-6 text-right font-bold ${
                                             transaction.transaction_type === 'Income' 
                                                 ? 'text-emerald-600' 
                                                 : 'text-slate-900'
                                         }`}>
                                             {formatAmount(transaction.amount, transaction.transaction_type)}
+                                        </td>
+                                        <td className="py-4 pr-6">
+                                            {String(transaction.status || '').toLowerCase() === 'confirmed' ? (
+                                                <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                                                    Confirmed
+                                                </span>
+                                            ) : String(transaction.status || '').toLowerCase() === 'pending' ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleConfirmClick(transaction)}
+                                                    className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-colors shadow-sm"
+                                                >
+                                                    Confirm
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs text-slate-500">
+                                                    {transaction.status || 'N/A'}
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -395,6 +450,18 @@ const Transactions = () => {
                             />
                         </div>
                     </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Method</label>
+                        <select
+                            value={newTransaction.payment_method}
+                            onChange={(e) => setNewTransaction({ ...newTransaction, payment_method: e.target.value })}
+                            className="select"
+                        >
+                            <option value="Mpesa">Mpesa</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </div>
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                             {error}
@@ -428,6 +495,80 @@ const Transactions = () => {
                         </button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* Confirm Transaction Modal */}
+            <Modal
+                isOpen={isConfirmModalOpen}
+                onClose={() => {
+                    setIsConfirmModalOpen(false);
+                    setTransactionToConfirm(null);
+                }}
+                title="Confirm Transaction"
+                size="md"
+            >
+                <div className="p-6 space-y-4">
+                    {transactionToConfirm && (
+                        <>
+                            <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-600">Description:</span>
+                                    <span className="text-sm font-semibold text-slate-900">{transactionToConfirm.description}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-600">Amount:</span>
+                                    <span className={`text-sm font-bold ${
+                                        transactionToConfirm.transaction_type === 'Income' 
+                                            ? 'text-emerald-600' 
+                                            : 'text-slate-900'
+                                    }`}>
+                                        {formatAmount(transactionToConfirm.amount, transactionToConfirm.transaction_type)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-600">Date:</span>
+                                    <span className="text-sm font-semibold text-slate-900">
+                                        {transactionToConfirm.transaction_date 
+                                            ? format(new Date(transactionToConfirm.transaction_date), 'MMM dd, yyyy')
+                                            : transactionToConfirm.created_at
+                                            ? format(new Date(transactionToConfirm.created_at), 'MMM dd, yyyy')
+                                            : 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+                            <p className="text-sm text-slate-700">
+                                Are you sure you want to confirm this transaction? This action cannot be undone.
+                            </p>
+                        </>
+                    )}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                            {error}
+                        </div>
+                    )}
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsConfirmModalOpen(false);
+                                setTransactionToConfirm(null);
+                                setError(null);
+                            }}
+                            className="flex-1 btn btn-secondary"
+                            disabled={isConfirming}
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={handleConfirmTransaction}
+                            className="flex-1 btn btn-primary"
+                            disabled={isConfirming}
+                        >
+                            {isConfirming ? 'Confirming...' : 'Yes, Confirm'}
+                        </button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

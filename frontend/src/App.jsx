@@ -23,6 +23,7 @@ import Library from './pages/Library';
 import Investments from './pages/Investments';
 import Loans from './pages/Loans';
 import LoanDetails from './pages/LoanDetails';
+import MoneyRequests from './pages/MoneyRequests';
 import Bills from './pages/Bills';
 import Invoices from './pages/Invoices';
 import Budgets from './pages/Budgets';
@@ -110,6 +111,7 @@ function App() {
           <Route path="investments" element={<FeatureRoute feature="investments"><Investments /></FeatureRoute>} />
           <Route path="loans" element={<FeatureRoute feature="loans"><Loans /></FeatureRoute>} />
           <Route path="loans/:id" element={<FeatureRoute feature="loans"><LoanDetails /></FeatureRoute>} />
+          <Route path="money-requests" element={<MoneyRequests />} />
           <Route path="inventory" element={<FeatureRoute feature="inventory"><Inventory /></FeatureRoute>} />
           <Route path="library" element={<FeatureRoute feature="library"><Library /></FeatureRoute>} />
           <Route path="library/books/:id" element={<FeatureRoute feature="library"><BookDetails /></FeatureRoute>} />
