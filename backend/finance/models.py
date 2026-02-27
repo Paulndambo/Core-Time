@@ -38,6 +38,7 @@ class MoneyRequest(AbstractBaseModel):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=255, default="Pending")
     direction = models.CharField(max_length=255, default="Outgoing")
+    reason = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.amount}"

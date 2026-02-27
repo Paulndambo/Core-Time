@@ -25,7 +25,8 @@ const MoneyRequests = () => {
         from_whom: '',
         amount: '',
         direction: 'Incoming',
-        status: 'Pending'
+        status: 'Pending',
+        reason: ''
     });
 
     // Fetch money requests on component mount
@@ -71,7 +72,8 @@ const MoneyRequests = () => {
                 from_whom: newMoneyRequest.from_whom.trim(),
                 amount: parseFloat(newMoneyRequest.amount),
                 direction: newMoneyRequest.direction,
-                status: newMoneyRequest.status
+                status: newMoneyRequest.status,
+                reason: newMoneyRequest.reason || ''
             };
 
             await createMoneyRequest(moneyRequestData);
@@ -82,7 +84,8 @@ const MoneyRequests = () => {
                 from_whom: '',
                 amount: '',
                 direction: 'Incoming',
-                status: 'Pending'
+                status: 'Pending',
+                reason: ''
             });
         } catch (err) {
             console.error('Error creating money request:', err);
@@ -107,7 +110,8 @@ const MoneyRequests = () => {
                 from_whom: request.from_whom,
                 amount: parseFloat(request.amount),
                 direction: request.direction,
-                status: newStatus
+                status: newStatus,
+                reason: request.reason || ''
             };
 
             await updateMoneyRequest(requestId, updateData);
@@ -191,6 +195,7 @@ const MoneyRequests = () => {
                                         <th className="pb-3 pl-6 font-semibold">From/To</th>
                                         <th className="pb-3 font-semibold">Direction</th>
                                         <th className="pb-3 font-semibold">Amount</th>
+                                        <th className="pb-3 font-semibold">Reason</th>
                                         <th className="pb-3 font-semibold">Status</th>
                                         <th className="pb-3 font-semibold">Date</th>
                                         <th className="pb-3 pr-6 text-right font-semibold">Actions</th>
@@ -217,6 +222,11 @@ const MoneyRequests = () => {
                                             </td>
                                             <td className="py-4 font-bold text-slate-900">
                                                 {formatCurrency(parseFloat(request.amount))}
+                                            </td>
+                                            <td className="py-4 text-slate-700 max-w-xs">
+                                                <span className="inline-block truncate" title={request.reason || 'N/A'}>
+                                                    {request.reason || 'N/A'}
+                                                </span>
                                             </td>
                                             <td className="py-4">
                                                 <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(request.status)}`}>
@@ -269,7 +279,8 @@ const MoneyRequests = () => {
                         from_whom: '',
                         amount: '',
                         direction: 'Incoming',
-                        status: 'Pending'
+                        status: 'Pending',
+                        reason: ''
                     });
                 }}
                 title="New Money Request"
@@ -313,6 +324,23 @@ const MoneyRequests = () => {
                             </select>
                         </div>
                     </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Reason</label>
+                        <select
+                            required
+                            value={newMoneyRequest.reason}
+                            onChange={(e) => setNewMoneyRequest({ ...newMoneyRequest, reason: e.target.value })}
+                            className="select"
+                        >
+                            <option value="">Select reason</option>
+                            <option value="Wedding contribution">Wedding contribution</option>
+                            <option value="Medical bill">Medical bill</option>
+                            <option value="School fees help">School fees help</option>
+                            <option value="Rent support">Rent support</option>
+                            <option value="Business capital">Business capital</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
                     {moneyRequestError && (
                         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                             {moneyRequestError}
@@ -328,7 +356,8 @@ const MoneyRequests = () => {
                                     from_whom: '',
                                     amount: '',
                                     direction: 'Incoming',
-                                    status: 'Pending'
+                                    status: 'Pending',
+                                    reason: ''
                                 });
                             }}
                             className="flex-1 btn btn-secondary"
